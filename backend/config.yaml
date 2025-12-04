@@ -1,0 +1,19 @@
+server:
+  host: "127.0.0.1"
+  port: 5000
+  workers: 4
+  environment: "production"
+
+model:
+  name: "GeoSlide_RF_OBIA"
+
+  architecture: "OBIA_RandomForest_Ensemble"
+  backbone: "ResNet50_FeatureExtractor"
+  weights: "checkpoints/rf_obia_v4.joblib"
+  device: "cuda:0"
+
+inference:
+  segmentation: "SLIC"
+  n_segments: 5000
+  compactness: 10.0
+  threshold: 0.15
