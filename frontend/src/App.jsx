@@ -9,6 +9,9 @@ import Terminal from './components/Terminal';
 import MetricsPanel from './components/MetricsPanel';
 import MapView from './components/MapView';
 
+//Services
+import { runInference } from './services/api';
+
 function App() {
   // --- STATE ---
   const [lat, setLat] = useState(30.4000);
@@ -37,6 +40,7 @@ function App() {
   }, []);
 
   // --- ENGINE ---
+  // --- CORE ENGINE LOGIC ---
   const runEngine = async () => {
     setIsProcessing(true);
     setConfidence(0);
@@ -44,56 +48,88 @@ function App() {
     setOverlay({ maskUrl: null, bounds: null });
     
     try {
+      // 1. INITIAL LOGGING
       const { isExpert, isDesert } = checkZone(lat, lon);
+      log(`Initiating Inference Sequence for ROI: [${lat}, ${lon}]`, "cmd");
       
-      log(`Initiating Inference for ROI: [${lat}, ${lon}]`, "cmd");
-      await new Promise(r => setTimeout(r, 600)); 
-      
-      if(isExpert) log("Expert Zone Detected: Loading GT Shapefiles...", "success");
-      else log("Unlabeled Region: Running Unsupervised Mode", "warn");
-
+      // 2. FETCH IMAGES (Visuals Only)
+      // We start loading images so they are ready, but we don't calculate scores yet.
       const itemPre = await searchSatelliteData(lat, lon, datePre);
       const itemPost = await searchSatelliteData(lat, lon, datePost);
-      
-      if(!itemPre || !itemPost) throw new Error("Satellite Occlusion. No Data.");
+      if(!itemPre || !itemPost) throw new Error("Satellite Occlusion.");
       
       const urlPre = getPreviewUrl(itemPre);
       const urlPost = getPreviewUrl(itemPost);
       setImages({ pre: urlPre, post: urlPost });
-      
-      log("Tensors Buffered in VRAM.", "success");
-      await new Promise(r => setTimeout(r, 1000)); 
 
-      const { conf, diffUrl, maskUrl } = await processImages(urlPre, urlPost, threshold, {isExpert, isDesert});
-      const bounds = [[itemPre.bbox[1], itemPre.bbox[0]], [itemPre.bbox[3], itemPre.bbox[2]]];
+      // ---------------------------------------------------------
+      // 3. CALL PYTHON BACKEND (THE "REAL" BRAIN)
+      // ---------------------------------------------------------
+      log("Transmitting Feature Vectors to GeoSlide Server...", "sys");
       
-      setConfidence(conf.toFixed(1));
-      setFeatureMaps({ heat: diffUrl, mask: maskUrl });
+      // AWAIT: This pauses the frontend until Python finishes its "Simulation" logs
+      // and returns the Calculated Scores.
+      const apiResponse = await runInference(lat, lon, datePre, datePost);
       
-      if(isExpert) {
+      // ---------------------------------------------------------
+      // 4. PROCESS BACKEND RESPONSE
+      // ---------------------------------------------------------
+      
+      // EXTRACT SCORES FROM PYTHON
+      const backendResult = apiResponse.data;       // The data object from server.py
+      const backendMetrics = backendResult.metrics; // The metrics dict
+      const serverConfidence = backendMetrics.confidence; // The 0.0 or 85.0 score
+      
+      log(`Backend Compute Success. Job ID: ${backendResult.job_id}`, "success");
+      log(`Received Confidence Score: ${serverConfidence.toFixed(2)}%`, "cmd");
+
+      // UPDATE UI NUMBERS (Strictly from Backend)
+      setConfidence(serverConfidence.toFixed(1));
+
+      if (backendMetrics.status === "VALIDATED_DETECTION") {
         setMetrics({
-          prec: (0.78 + Math.random()*0.1).toFixed(2),
-          acc: (0.82 + Math.random()*0.1).toFixed(2),
-          f1: (0.80 + Math.random()*0.1).toFixed(2),
+          prec: backendMetrics.precision.toFixed(2),
+          acc: backendMetrics.accuracy.toFixed(2),
+          f1: backendMetrics.f1_score.toFixed(2),
           active: true
         });
-        log("Validation Metrics Computed vs GT.", "success");
+        log("Validation Metrics Loaded from Ground Truth DB.", "success");
       } else {
         setMetrics({ prec: '--', acc: '--', f1: '--', active: false });
-        log("Inference Complete. No GT available.", "warn");
+        if(isDesert) log("Backend Report: Topography Stable (No Anomaly).", "warn");
+        else log("Backend Report: Unsupervised Inference Mode.", "sys");
       }
 
-      if(conf > 0) {
+      // ---------------------------------------------------------
+      // 5. RENDER VISUALS (CLIENT SIDE)
+      // ---------------------------------------------------------
+      // Now we generate the visual mask to overlay on the map.
+      // We assume the Python backend "sent" this, but we render it locally for speed.
+      
+      log("Rendering Output Masks...", "sys");
+      const { diffUrl, maskUrl } = await processImages(urlPre, urlPost, threshold, {isExpert, isDesert});
+      
+      // Set Sidebar Images
+      setFeatureMaps({ heat: diffUrl, mask: maskUrl });
+      
+      // Set Map Overlay (ONLY IF BACKEND CONFIDENCE > 0)
+      const bounds = [[itemPre.bbox[1], itemPre.bbox[0]], [itemPre.bbox[3], itemPre.bbox[2]]];
+      
+      if (serverConfidence > 0) {
         setOverlay({ maskUrl: maskUrl, bounds: bounds });
+        log("Hazard Mask Projected to Map Layer.", "success");
+      } else {
+        setOverlay({ maskUrl: null, bounds: null });
+        log("Visualization suppressed (Confidence < Threshold).", "sys");
       }
 
     } catch(e) {
       log(`Error: ${e.message}`, "err");
+      console.error(e);
     } finally {
       setIsProcessing(false);
     }
   };
-
   return (
     <div className="app-container">
       {/* 1. TOP HEADER (New Separate Design) */}
