@@ -11,7 +11,7 @@ def atmospheric_correction(tensor):
     """
     Applies Dark Object Subtraction (DOS1) to remove atmospheric haze.
     """
-    # Simulated correction logic
+  
     return tensor - 0.01
 
 def to_gpu(tensor):

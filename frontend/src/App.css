@@ -130,6 +130,7 @@ input:focus { outline: none; border-color: var(--neon-cyan); }
 .warn { color: #ffcc00; } 
 .success { color: var(--neon-cyan); text-shadow: 0 0 5px rgba(0, 255, 204, 0.4); } 
 .err { color: var(--neon-red); }
+
 /* Metrics */
 .conf-box { border: 1px solid #333; padding: 10px; text-align: center; border-radius: 4px; margin-top: 10px; transition: 0.3s; background: #050505; }
 .conf-val { font-size: 2rem; font-weight: 800; color: #fff; }

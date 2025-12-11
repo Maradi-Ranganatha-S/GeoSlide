@@ -1,0 +1,2 @@
+datasetlink:https://www.kaggle.com/datasets/nasa/landslide-events
+datasets/catalog.csv is the csv we have given to the google earth engine for downloading the pre and post images using the script.Then those tif files have been converted to the .h5 format for the best training .

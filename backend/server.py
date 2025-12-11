@@ -72,6 +72,21 @@ def predict_hazard():
     except Exception as e:
         logger.error(f"Inference Failure: {str(e)}", exc_info=True)
         return jsonify({"error": "Internal Server Error"}), 500
+    
+#benchmark
+
+@app.route('/api/v1/benchmark', methods=['POST'])
+def run_benchmark():
+    """
+    Triggers the Batch Analysis on the Test Set.
+    """
+    try:
+        logger.info("Received Batch Benchmark Request.")
+        results = engine.run_batch_benchmark()
+        return jsonify({"status": "success", "data": results}), 200
+    except Exception as e:
+        logger.error(f"Benchmark Error: {str(e)}")
+        return jsonify({"error": "Failed to run benchmark"}), 500
 
 if __name__ == "__main__":
     print("\n" + "="*60)
